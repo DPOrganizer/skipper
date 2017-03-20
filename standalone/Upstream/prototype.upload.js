@@ -8,6 +8,7 @@ var util = require('util');
 var log = require('../logger');
 var buildOrNormalizeReceiver = require('./build-or-normalize-receiver');
 var r_buildRenamerStream = require('./build-renamer-stream');
+var buildAccepterStream = require('./build-accepter-stream');
 var debug = require('debug')('skipper');
 var Writable = require('stream').Writable; // (for the leaky pipe)
 
@@ -174,16 +175,28 @@ module.exports = function upload (opts, _cb) {
     log: log
   });
 
+  //build an accepter stream. that will run acceptFile function (if provided) on each file
+  //to see if we want to accept this file. Also needs a referenc to self._files to add metadata
+  var __accepter__ = buildAccepterStream(opts.acceptFile,self._files);
+
+  __accepter__.once('error', function unableToUpload(err) {
+    log.color('red').write('A receiver handling Upstream `%s` encountered a write error :', self.fieldName, util.inspect(err));
+
+    // Forcibly end the incoming stream of files on this upstream
+    self.fatalIncomingError(err);
+
+    // Trigger callback
+    cb(err, self.serializeFiles());
+  });
+
 
   // Pipe to the (Writeable) receiver.  Every time the file parser encounters a new file
   // on this stream (i.e. a new file in the same form field), it will call Upstream's
   // writeFile method, which will push the new file stream into Upstream's buffer.  The
   // piping mechanism will then cause "_write" to be called on the Receiver, so it can
   // handle the file in whatever way it sees fit (saving to disk, streaming to S3, etc.)
-  self.pipe(__renamer__).pipe(receiver__);
+  self.pipe(__accepter__).pipe(__renamer__).pipe(receiver__);
 
   // Chainable
   return self;
 };
-
-
