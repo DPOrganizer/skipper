@@ -3,7 +3,7 @@
  */
 
 var Lifecycle = require('./helpers/lifecycle'),
-	_ = require('lodash'),
+	_ = require('@sailshq/lodash'),
 	assert = require('assert');
 
 
